@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"regexp"
 )
 
 func parseEnv() map[string]interface{} {
@@ -17,59 +15,31 @@ func parseEnv() map[string]interface{} {
 	return result
 }
 
-func main() {
-	err := filepath.Walk(os.Getenv("BUILD_DIR"), visit)
+func createNewEnv(config map[string]interface{}) string {
+	fileContents := "window._env_ = {\n"
 
-	if err != nil {
-		panic(err)
+	for key, value := range config {
+		line := fmt.Sprintf("\t%s: \"%s\",\n", key, value)
+		fileContents += line
+	}
+
+	fileContents += "};"
+
+	return fileContents
+}
+
+func main() {
+	envPath := os.Getenv("ENVPATH")
+	os.Remove(envPath)
+	os.Create(envPath)
+
+	appConfig := parseEnv()
+	fileContents := []byte(createNewEnv(appConfig))
+	fileErr := ioutil.WriteFile(envPath, fileContents, 0)
+
+	if fileErr != nil {
+		panic(fileErr)
 	}
 
 	os.Exit(0)
-}
-
-func visit(path string, fi os.FileInfo, err error) error {
-
-	if err != nil {
-		return err
-	}
-
-	if !!fi.IsDir() {
-		return nil
-	}
-
-	matched, err := filepath.Match("*.js", fi.Name())
-
-	if err != nil {
-		panic(err)
-	}
-
-	if matched {
-		fmt.Printf("\nReplacing variables in: %s\n", fi.Name())
-		read, err := ioutil.ReadFile(path)
-
-		if err != nil {
-			panic(err)
-		}
-
-		var newContents = string(read)
-
-		for key, value := range parseEnv() {
-			fmt.Printf("Replacing %s with value %s\n", key, value)
-			r := regexp.MustCompile(fmt.Sprintf("(\"%s\")[:](\"[^\"]*\")", key))
-
-			newContents = r.ReplaceAllString(newContents, fmt.Sprintf("\"%s\":\"%s\"", key, value))
-
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		err = ioutil.WriteFile(path, []byte(newContents), 0)
-
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return nil
 }
